@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CuadernIA · Generador de cuadernos Jupyter para análisis estadístico</title>
+<meta name="description" content="Sube un CSV o Excel, describe tu estudio y obtén un cuaderno Jupyter con análisis descriptivo, inferencial y modelización, listo para NarrativIA.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --tinta:#101A16;
+  --tinta-suave:#3D4B44;
+  --papel:#E7E9E1;
+  --superficie:#FFFFFF;
+  --pino:#1F5C46;
+  --pino-claro:#EAF2ED;
+  --barra:#DCE8DC;      /* verde de papel continuo */
+  --senal:#D9A404;
+  --alerta:#A8321B;
+  --linea:#C7CCC0;
+  --radio:3px;
+  --disp:"Space Grotesk", "Trebuchet MS", sans-serif;
+  --cuerpo:"Source Sans 3", system-ui, sans-serif;
+  --mono:"JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--papel); color:var(--tinta);
+  font-family:var(--cuerpo); font-size:16px; line-height:1.55;
+}
+.envoltura{max-width:1080px;margin:0 auto;padding:0 18px 90px}
+
+/* ---------- cabecera ---------- */
+.masthead{padding:44px 0 26px;border-bottom:2px solid var(--tinta);margin-bottom:34px}
+.marca{font-family:var(--disp);font-weight:700;font-size:clamp(38px,7vw,62px);letter-spacing:-.03em;line-height:.95;margin:0}
+.marca b{color:var(--pino)}
+.lema{font-size:clamp(15px,2.4vw,19px);max-width:52ch;margin:12px 0 0;color:var(--tinta-suave)}
+.tira{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;align-items:center}
+.pastilla{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--linea);background:var(--superficie);padding:4px 9px;border-radius:var(--radio)}
+.pastilla.viva{border-color:var(--pino);color:var(--pino);background:var(--pino-claro)}
+
+/* ---------- pasos / celdas ---------- */
+.celda{display:grid;grid-template-columns:78px 1fr;gap:0;margin-bottom:26px}
+.canal{font-family:var(--mono);font-size:12px;color:var(--tinta-suave);padding-top:20px;text-align:right;padding-right:14px;user-select:none}
+.canal .idx{display:block;color:var(--pino);font-weight:700}
+.cuerpo-celda{background:var(--superficie);border:1px solid var(--linea);border-left:3px solid var(--tinta);border-radius:var(--radio);padding:20px 22px}
+.celda[data-estado="listo"] .cuerpo-celda{border-left-color:var(--pino)}
+.celda[data-estado="espera"] .cuerpo-celda{opacity:.62}
+h2{font-family:var(--disp);font-size:22px;letter-spacing:-.01em;margin:0 0 4px}
+.sub{color:var(--tinta-suave);font-size:14.5px;margin:0 0 18px}
+h3{font-family:var(--disp);font-size:15px;margin:22px 0 8px;letter-spacing:.01em}
+
+/* ---------- formularios ---------- */
+label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--tinta-suave);margin-bottom:5px}
+input[type=text],input[type=password],input[type=number],select,textarea{
+  width:100%;font-family:var(--cuerpo);font-size:15px;color:var(--tinta);
+  background:#FCFDFB;border:1px solid var(--linea);border-radius:var(--radio);padding:9px 11px;
+}
+textarea{min-height:84px;resize:vertical;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pino);outline-offset:1px;border-color:var(--pino)}
+.rejilla{display:grid;gap:14px 16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.campo{margin-bottom:14px}
+.ancho-total{grid-column:1/-1}
+.ayuda{font-size:13px;color:var(--tinta-suave);margin:5px 0 0}
+
+button{font-family:var(--disp);font-size:14px;font-weight:500;cursor:pointer;border-radius:var(--radio);border:1px solid var(--tinta);background:var(--tinta);color:#fff;padding:10px 18px;transition:transform .08s ease, background .15s ease}
+button:hover{background:var(--pino);border-color:var(--pino)}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:not-allowed;transform:none;background:var(--tinta-suave);border-color:var(--tinta-suave)}
+button:focus-visible{outline:2px solid var(--senal);outline-offset:2px}
+.btn-sec{background:transparent;color:var(--tinta);border-color:var(--linea)}
+.btn-sec:hover{background:var(--pino-claro);color:var(--pino);border-color:var(--pino)}
+.btn-min{padding:5px 9px;font-size:12px;font-family:var(--mono);background:transparent;color:var(--tinta-suave);border-color:var(--linea)}
+.btn-min:hover{background:var(--pino-claro);color:var(--pino);border-color:var(--pino)}
+.acciones{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px}
+
+/* ---------- zona de subida ---------- */
+.soltar{border:2px dashed var(--linea);border-radius:var(--radio);padding:34px 20px;text-align:center;background:repeating-linear-gradient(-45deg,transparent,transparent 12px,rgba(199,204,192,.14) 12px,rgba(199,204,192,.14) 24px);cursor:pointer}
+.soltar:hover,.soltar.activa{border-color:var(--pino);background:var(--pino-claro)}
+.soltar strong{font-family:var(--disp);font-size:18px;display:block;margin-bottom:4px}
+.soltar span{font-size:14px;color:var(--tinta-suave)}
+
+/* ---------- tabla de perfil (papel continuo) ---------- */
+.marco-tabla{overflow-x:auto;border:1px solid var(--linea);border-radius:var(--radio);margin-top:6px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+th{background:var(--tinta);color:#fff;text-align:left;padding:7px 10px;font-weight:400;letter-spacing:.04em;font-size:11px;text-transform:uppercase;position:sticky;top:0}
+td{padding:6px 10px;border-top:1px solid #EDEFE9}
+tbody tr:nth-child(odd){background:var(--barra)}
+.tipo{font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;border:1px solid currentColor}
+.t-num{color:#1F5C46}.t-cat{color:#6B3FA0}.t-fec{color:#1C5673}.t-bin{color:#8A5A00}
+.aviso-na{color:var(--alerta);font-weight:700}
+.resumen-cifras{display:flex;flex-wrap:wrap;gap:22px;margin:16px 0 4px}
+.cifra{min-width:88px}
+.cifra b{display:block;font-family:var(--disp);font-size:26px;line-height:1.1}
+.cifra span{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--tinta-suave)}
+
+/* ---------- plan ---------- */
+.seccion-plan{border:1px solid var(--linea);border-left:3px solid var(--senal);border-radius:var(--radio);padding:13px 15px;margin-bottom:11px;background:#FCFDFB}
+.seccion-plan header{display:flex;gap:10px;align-items:center;margin-bottom:9px}
+.seccion-plan .n{font-family:var(--mono);font-size:12px;color:var(--pino);font-weight:700}
+.seccion-plan .bloque{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tinta-suave);border:1px solid var(--linea);padding:2px 6px;border-radius:8px}
+.seccion-plan .mandos{margin-left:auto;display:flex;gap:5px}
+.seccion-plan[data-hecho="1"]{border-left-color:var(--pino)}
+
+/* ---------- vista previa cuaderno ---------- */
+.nb{border:1px solid var(--linea);border-radius:var(--radio);background:#FBFCFA;padding:4px;max-height:560px;overflow:auto;margin-top:6px}
+.nb-celda{display:grid;grid-template-columns:64px 1fr;gap:0;margin:8px 0}
+.nb-canal{font-family:var(--mono);font-size:11px;color:#9AA69E;text-align:right;padding:6px 10px 0 0}
+.nb-md{background:transparent;padding:4px 10px}
+.nb-md h1,.nb-md h2,.nb-md h3{font-family:var(--disp);margin:6px 0}
+.nb-md h1{font-size:20px}.nb-md h2{font-size:17px}.nb-md h3{font-size:14.5px}
+.nb-md p,.nb-md li{font-size:14.5px}
+.nb-cod{background:#0E1512;color:#DCE8DC;border-radius:var(--radio);padding:11px 13px;overflow-x:auto}
+.nb-cod code{font-family:var(--mono);font-size:12.5px;line-height:1.55;white-space:pre}
+
+/* ---------- barra de progreso ---------- */
+.progreso{height:6px;background:var(--barra);border-radius:99px;overflow:hidden;margin:14px 0 8px}
+.progreso i{display:block;height:100%;width:0;background:var(--pino);transition:width .35s ease}
+.registro{font-family:var(--mono);font-size:12px;color:var(--tinta-suave);max-height:130px;overflow:auto}
+.registro div{padding:1px 0}
+.registro .err{color:var(--alerta)}
+.registro .ok{color:var(--pino)}
+
+/* ---------- ajustes ---------- */
+.ajustes{border:1px solid var(--linea);background:var(--superficie);border-radius:var(--radio);padding:0 18px;margin-bottom:30px}
+.ajustes summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:13px 0;list-style:none}
+.ajustes summary::-webkit-details-marker{display:none}
+.ajustes summary::before{content:"▸ ";color:var(--pino)}
+.ajustes[open] summary::before{content:"▾ "}
+.ajustes .interior{padding-bottom:18px;border-top:1px dashed var(--linea);padding-top:16px}
+
+.nota{border-left:3px solid var(--senal);background:#FDF8E7;padding:11px 14px;border-radius:var(--radio);font-size:14px;margin:16px 0}
+.nota.mal{border-left-color:var(--alerta);background:#FBEDEA}
+.oculto{display:none !important}
+.historial-item{display:flex;gap:10px;align-items:center;font-size:14px;border-bottom:1px dashed var(--linea);padding:8px 0}
+.historial-item .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+footer{border-top:1px solid var(--linea);margin-top:40px;padding-top:18px;font-size:13px;color:var(--tinta-suave)}
+footer a{color:var(--pino)}
+@media (max-width:640px){
+  .celda{grid-template-columns:1fr}
+  .canal{text-align:left;padding:0 0 6px 0}
+  .canal .idx{display:inline;margin-right:8px}
+  .cuerpo-celda{padding:16px}
+  .nb-celda{grid-template-columns:1fr}
+  .nb-canal{text-align:left;padding:4px 4px 0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="envoltura">
+
+<header class="masthead">
+  <h1 class="marca">Cuadern<b>IA</b></h1>
+  <p class="lema">Sube tus datos, describe el estudio y obtén un cuaderno Jupyter ejecutable con el descriptivo, el inferencial y la modelización —  listo para entrar en NarrativIA.</p>
+  <div class="tira">
+    <span class="pastilla">CSV · XLSX</span>
+    <span class="pastilla">pandas · scipy · statsmodels</span>
+    <span class="pastilla">.ipynb nbformat 4</span>
+    <span class="pastilla viva">salida → NarrativIA</span>
+  </div>
+</header>
+
+<details class="ajustes" id="ajustes">
+  <summary>Ajustes del modelo y privacidad</summary>
+  <div class="interior">
+    <div class="rejilla">
+      <div class="campo">
+        <label for="clave">Clave de OpenAI</label>
+        <input type="password" id="clave" placeholder="sk-..." autocomplete="off">
+        <p class="ayuda">Se guarda solo en este navegador (localStorage) y viaja únicamente a api.openai.com.</p>
+      </div>
+      <div class="campo">
+        <label for="modelo">Modelo</label>
+        <select id="modelo">
+          <option value="gpt-4o-mini" selected>gpt-4o-mini (por defecto)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="filas-muestra">Filas de ejemplo que se envían al modelo</label>
+        <input type="number" id="filas-muestra" value="3" min="0" max="20">
+        <p class="ayuda">Pon 0 si los datos son sensibles: se enviará solo el perfil estadístico, nunca registros.</p>
+      </div>
+      <div class="campo">
+        <label for="idioma">Idioma del cuaderno</label>
+        <select id="idioma">
+          <option value="español" selected>Español</option>
+          <option value="inglés">Inglés</option>
+          <option value="portugués">Portugués</option>
+        </select>
+      </div>
+    </div>
+    <div class="acciones">
+      <button class="btn-sec" id="btn-guardar-clave">Guardar ajustes</button>
+      <button class="btn-min" id="btn-borrar-clave">Borrar la clave de este navegador</button>
+      <span class="pastilla" id="estado-clave">sin clave</span>
+    </div>
+  </div>
+</details>
+
+<!-- 1. DATOS -->
+<section class="celda" id="celda-datos" data-estado="listo">
+  <div class="canal"><span class="idx">In [1]</span>datos</div>
+  <div class="cuerpo-celda">
+    <h2>Datos</h2>
+    <p class="sub">CSV (coma, punto y coma o tabulador) o Excel. Los datos se procesan en tu navegador.</p>
+    <div class="soltar" id="soltar" tabindex="0" role="button" aria-label="Seleccionar fichero de datos">
+      <strong>Arrastra el fichero aquí</strong>
+      <span>o pulsa para elegirlo · .csv .tsv .txt .xlsx .xls</span>
+    </div>
+    <input type="file" id="fichero" class="oculto" accept=".csv,.tsv,.txt,.xlsx,.xls">
+    <div id="selector-hoja" class="campo oculto" style="margin-top:14px">
+      <label for="hoja">Hoja del libro</label>
+      <select id="hoja"></select>
+    </div>
+    <div id="panel-perfil" class="oculto">
+      <div class="resumen-cifras" id="cifras"></div>
+      <h3>Perfil de variables</h3>
+      <div class="marco-tabla"><table id="tabla-perfil"><thead></thead><tbody></tbody></table></div>
+      <p class="ayuda">Tipos inferidos automáticamente. Si algo está mal clasificado, indícalo en las notas del estudio y el plan lo corregirá.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. ESTUDIO -->
+<section class="celda" id="celda-estudio" data-estado="espera">
+  <div class="canal"><span class="idx">In [2]</span>estudio</div>
+  <div class="cuerpo-celda">
+    <h2>De qué va el estudio</h2>
+    <p class="sub">Cuanto más concreta sea la pregunta de investigación, más ajustado será el plan estadístico.</p>
+    <div class="rejilla">
+      <div class="campo ancho-total">
+        <label for="titulo">Título del estudio</label>
+        <input type="text" id="titulo" placeholder="Efecto del riego deficitario sobre el rendimiento del cultivo">
+      </div>
+      <div class="campo ancho-total">
+        <label for="objetivo">Objetivo y pregunta de investigación</label>
+        <textarea id="objetivo" placeholder="Ejemplo: evaluar si tres dosis de riego modifican el rendimiento y la calidad del fruto, controlando por bloque experimental y por la fecha de plantación. Hipótesis: el riego deficitario controlado no reduce el rendimiento pero aumenta el contenido en sólidos solubles."></textarea>
+      </div>
+      <div class="campo">
+        <label for="diseno">Diseño</label>
+        <select id="diseno">
+          <option>Observacional transversal</option>
+          <option>Observacional de cohortes</option>
+          <option>Casos y controles</option>
+          <option>Experimental con grupos independientes</option>
+          <option>Experimental con medidas repetidas</option>
+          <option>Ensayo clínico aleatorizado</option>
+          <option>Diseño factorial / bloques</option>
+          <option>Serie temporal</option>
+          <option>Datos de encuesta / escalas</option>
+          <option>Exploratorio, aún sin definir</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="dependientes">Variable(s) respuesta</label>
+        <input type="text" id="dependientes" placeholder="rendimiento_kg, brix">
+      </div>
+      <div class="campo">
+        <label for="independientes">Factores o predictores</label>
+        <input type="text" id="independientes" placeholder="tratamiento, bloque, fecha_plantacion">
+      </div>
+      <div class="campo">
+        <label for="agrupacion">Variable de agrupación o sujeto (opcional)</label>
+        <input type="text" id="agrupacion" placeholder="id_parcela">
+      </div>
+      <div class="campo">
+        <label for="alfa">Nivel de significación</label>
+        <select id="alfa"><option>0.05</option><option>0.01</option><option>0.10</option></select>
+      </div>
+      <div class="campo">
+        <label for="publico">Destino del análisis</label>
+        <select id="publico">
+          <option>Artículo científico</option>
+          <option>Tesis doctoral</option>
+          <option>TFG / TFM</option>
+          <option>Informe técnico</option>
+          <option>Memoria de proyecto</option>
+          <option>Docencia</option>
+        </select>
+      </div>
+      <div class="campo ancho-total">
+        <label for="notas">Notas para el analista (opcional)</label>
+        <textarea id="notas" placeholder="Los valores 999 son ausentes. La variable dolor es una escala ordinal 0-10. Excluir los registros del piloto. Interesa el tamaño del efecto más que el valor p."></textarea>
+      </div>
+    </div>
+    <div class="acciones">
+      <button id="btn-plan">Proponer plan de análisis</button>
+      <span class="pastilla" id="estado-plan">esperando datos</span>
+    </div>
+  </div>
+</section>
+
+<!-- 3. PLAN -->
+<section class="celda" id="celda-plan" data-estado="espera">
+  <div class="canal"><span class="idx">In [3]</span>plan</div>
+  <div class="cuerpo-celda">
+    <h2>Plan de análisis</h2>
+    <p class="sub">Revisa y edita las secciones antes de escribir el cuaderno. Cada sección será un par de celdas markdown + código.</p>
+    <div id="estrategia" class="nota oculto"></div>
+    <div id="lista-plan"></div>
+    <div class="acciones">
+      <button class="btn-sec" id="btn-anadir-seccion">Añadir sección</button>
+      <button id="btn-generar">Escribir el cuaderno</button>
+      <button class="btn-min oculto" id="btn-parar">Detener</button>
+    </div>
+    <div class="progreso oculto" id="barra"><i></i></div>
+    <div class="registro" id="registro"></div>
+  </div>
+</section>
+
+<!-- 4. CUADERNO -->
+<section class="celda" id="celda-cuaderno" data-estado="espera">
+  <div class="canal"><span class="idx">In [4]</span>cuaderno</div>
+  <div class="cuerpo-celda">
+    <h2>Cuaderno</h2>
+    <p class="sub">Descarga las dos piezas en la misma carpeta, ejecuta el cuaderno de arriba abajo y pasa el .ipynb ya ejecutado a NarrativIA.</p>
+    <div class="acciones">
+      <button id="btn-ipynb" disabled>Descargar cuaderno .ipynb</button>
+      <button class="btn-sec" id="btn-csv" disabled>Descargar datos.csv</button>
+      <button class="btn-min" id="btn-copiar" disabled>Copiar todo el código</button>
+    </div>
+    <div class="nota" id="aviso-narrativia">NarrativIA lee las salidas de las celdas: el cuaderno debe ejecutarse entero (en Jupyter o en Colab) antes de subirlo, o la sección de Resultados llegará vacía.</div>
+    <div class="nb oculto" id="vista-nb"></div>
+  </div>
+</section>
+
+<details class="ajustes" id="panel-historial">
+  <summary>Cuadernos guardados en este navegador</summary>
+  <div class="interior"><div id="historial">Todavía no hay ninguno.</div></div>
+</details>
+
+<footer>
+  <p>CuadernIA · Herramientas IA para la academia · Universidad Miguel Hernández de Elche. Todo el procesamiento de datos ocurre en el navegador; solo el perfil estadístico y el contexto del estudio se envían al modelo.</p>
+</footer>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Estado
+   ===================================================================== */
+const S = {
+  nombreFichero:"", filas:[], campos:[], perfil:null,
+  libro:null, plan:null, secciones:[], generando:false, parar:false, cuaderno:null
+};
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const CLAVE_LS = "ia_openai_key";
+const CFG_LS = "cuadernia_cfg";
+
+/* =====================================================================
+   Ajustes
+   ===================================================================== */
+function cargarAjustes(){
+  const k = localStorage.getItem(CLAVE_LS) || "";
+  $("#clave").value = k;
+  marcaClave(k);
+  try{
+    const c = JSON.parse(localStorage.getItem(CFG_LS) || "{}");
+    if(c.modelo) $("#modelo").value = c.modelo;
+    if(c.filas !== undefined) $("#filas-muestra").value = c.filas;
+    if(c.idioma) $("#idioma").value = c.idioma;
+  }catch(e){}
+  if(!k) $("#ajustes").open = true;
+}
+function marcaClave(k){
+  const e = $("#estado-clave");
+  e.textContent = k ? ("clave activa · " + k.slice(0,6) + "…" + k.slice(-4)) : "sin clave";
+  e.classList.toggle("viva", !!k);
+}
+$("#btn-guardar-clave").onclick = () => {
+  const k = $("#clave").value.trim();
+  if(k) localStorage.setItem(CLAVE_LS, k);
+  localStorage.setItem(CFG_LS, JSON.stringify({
+    modelo:$("#modelo").value, filas:$("#filas-muestra").value, idioma:$("#idioma").value
+  }));
+  marcaClave(k);
+  log("Ajustes guardados.", "ok");
+};
+$("#btn-borrar-clave").onclick = () => {
+  localStorage.removeItem(CLAVE_LS); $("#clave").value=""; marcaClave("");
+};
+
+/* =====================================================================
+   Carga y lectura de ficheros
+   ===================================================================== */
+const zona = $("#soltar");
+zona.onclick = () => $("#fichero").click();
+zona.onkeydown = e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("#fichero").click(); } };
+["dragenter","dragover"].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.add("activa"); }));
+["dragleave","drop"].forEach(ev => zona.addEventListener(ev, e => { e.preventDefault(); zona.classList.remove("activa"); }));
+zona.addEventListener("drop", e => { if(e.dataTransfer.files[0]) leerFichero(e.dataTransfer.files[0]); });
+$("#fichero").onchange = e => { if(e.target.files[0]) leerFichero(e.target.files[0]); };
+
+function leerFichero(f){
+  S.nombreFichero = f.name;
+  const ext = f.name.split(".").pop().toLowerCase();
+  if(ext === "xlsx" || ext === "xls"){
+    const fr = new FileReader();
+    fr.onload = ev => {
+      try{
+        S.libro = XLSX.read(new Uint8Array(ev.target.result), {type:"array", cellDates:true});
+        const sel = $("#hoja"); sel.innerHTML = "";
+        S.libro.SheetNames.forEach(n => { const o=document.createElement("option"); o.value=o.textContent=n; sel.appendChild(o); });
+        $("#selector-hoja").classList.remove("oculto");
+        sel.onchange = () => cargarHoja(sel.value);
+        cargarHoja(S.libro.SheetNames[0]);
+      }catch(err){ aviso("No se ha podido leer el libro de Excel: " + err.message); }
+    };
+    fr.readAsArrayBuffer(f);
+  } else {
+    const fr = new FileReader();
+    fr.onload = ev => {
+      $("#selector-hoja").classList.add("oculto");
+      const r = Papa.parse(ev.target.result.replace(/^\uFEFF/, ""), {header:true, skipEmptyLines:"greedy", dynamicTyping:false});
+      if(!r.data.length) return aviso("El fichero no contiene filas de datos.");
+      const campos = (r.meta.fields || []).filter(c => c !== null && String(c).trim() !== "");
+      if(!campos.length) return aviso("No se ha reconocido la fila de cabecera con los nombres de las variables.");
+      procesar(r.data, campos);
+    };
+    fr.readAsText(f, "UTF-8");
+  }
+}
+function cargarHoja(nombre){
+  const hoja = S.libro.Sheets[nombre];
+  const m = XLSX.utils.sheet_to_json(hoja, {header:1, raw:false, defval:"", blankrows:false});
+  if(m.length < 2) return aviso("La hoja seleccionada no tiene datos suficientes.");
+  const campos = m[0].map((c,i) => (String(c).trim() || ("col_" + (i+1))));
+  const filas = m.slice(1).map(fila => {
+    const o = {}; campos.forEach((c,i) => o[c] = fila[i] === undefined ? "" : String(fila[i])); return o;
+  });
+  procesar(filas, campos);
+}
+function procesar(filas, campos){
+  S.campos = campos;
+  S.filas = filas.map(f => { const o={}; campos.forEach(c => o[c] = limpiaCelda(f[c])); return o; });
+  S.perfil = perfilar(S.filas, campos);
+  pintarPerfil();
+  $("#celda-estudio").dataset.estado = "listo";
+  $("#estado-plan").textContent = "listo para planificar";
+  $("#estado-plan").classList.add("viva");
+  document.getElementById("celda-estudio").scrollIntoView({behavior:"smooth", block:"start"});
+}
+function limpiaCelda(v){
+  if(v === undefined || v === null) return "";
+  let s = String(v).trim();
+  if(/^(na|n\/a|nan|null|nulo|nd|n\.d\.|-|\.|#n\/a|#¡div\/0!)$/i.test(s)) return "";
+  return s;
+}
+
+/* ---- inferencia de tipos y estadísticos ---- */
+function aNumero(s){
+  if(s === "") return NaN;
+  let t = s.replace(/\s|€|%|\$/g, "");
+  if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g,"").replace(",",".");   // 1.234,56
+  else if(/^-?\d+,\d+$/.test(t)) t = t.replace(",", ".");                                 // 12,5
+  else if(/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) t = t.replace(/,/g,"");                 // 1,234.56
+  return /^-?\d*\.?\d+([eE][-+]?\d+)?$/.test(t) ? parseFloat(t) : NaN;
+}
+function esFecha(s){
+  return /^\d{4}-\d{2}-\d{2}/.test(s) || /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s);
+}
+function cuantil(orden, p){
+  if(!orden.length) return NaN;
+  const h = (orden.length - 1) * p, b = Math.floor(h);
+  return orden[b] + (h - b) * ((orden[b+1] !== undefined ? orden[b+1] : orden[b]) - orden[b]);
+}
+function perfilar(filas, campos){
+  const n = filas.length;
+  const cols = campos.map(c => {
+    const brutos = filas.map(f => f[c]);
+    const validos = brutos.filter(v => v !== "");
+    const faltan = n - validos.length;
+    const nums = validos.map(aNumero).filter(v => !isNaN(v));
+    const unicos = new Set(validos);
+    const propNum = validos.length ? nums.length / validos.length : 0;
+    const propFecha = validos.length ? validos.filter(esFecha).length / validos.length : 0;
+    let tipo = "categórica";
+    if(propFecha > .8) tipo = "fecha";
+    else if(propNum > .85 && unicos.size > 2) tipo = "numérica";
+    else if(unicos.size === 2) tipo = "binaria";
+    else if(propNum > .85) tipo = "numérica";
+    const col = {nombre:c, tipo, n:validos.length, faltan, pctFaltan:n ? +(100*faltan/n).toFixed(1) : 0, unicos:unicos.size};
+    if(tipo === "numérica" && nums.length > 1){
+      const o = nums.slice().sort((a,b) => a-b);
+      const media = nums.reduce((a,b) => a+b, 0) / nums.length;
+      const de = Math.sqrt(nums.reduce((a,b) => a + (b-media)**2, 0) / (nums.length - 1));
+      const asim = de > 0 ? nums.reduce((a,b) => a + ((b-media)/de)**3, 0) / nums.length : 0;
+      Object.assign(col, {
+        media:+media.toFixed(4), de:+de.toFixed(4), min:+o[0].toFixed(4), max:+o[o.length-1].toFixed(4),
+        q1:+cuantil(o,.25).toFixed(4), mediana:+cuantil(o,.5).toFixed(4), q3:+cuantil(o,.75).toFixed(4),
+        asimetria:+asim.toFixed(3), enteros: nums.every(v => Number.isInteger(v))
+      });
+    } else {
+      const cuenta = {};
+      validos.forEach(v => cuenta[v] = (cuenta[v] || 0) + 1);
+      col.frecuentes = Object.entries(cuenta).sort((a,b) => b[1]-a[1]).slice(0,8).map(([v,k]) => ({valor:v, n:k}));
+    }
+    return col;
+  });
+  const dup = n - new Set(filas.map(f => JSON.stringify(f))).size;
+  return {nFilas:n, nCols:campos.length, duplicadas:dup, columnas:cols};
+}
+
+/* ---- pintado del perfil ---- */
+function pintarPerfil(){
+  const p = S.perfil;
+  const nNum = p.columnas.filter(c => c.tipo === "numérica").length;
+  const conNA = p.columnas.filter(c => c.faltan > 0).length;
+  $("#cifras").innerHTML = [
+    ["Filas", p.nFilas], ["Variables", p.nCols], ["Numéricas", nNum],
+    ["Con ausentes", conNA], ["Filas duplicadas", p.duplicadas]
+  ].map(([t,v]) => '<div class="cifra"><b>' + v + '</b><span>' + t + '</span></div>').join("");
+
+  const cab = ["Variable","Tipo","n","Ausentes","Únicos","Resumen"];
+  $("#tabla-perfil thead").innerHTML = "<tr>" + cab.map(h => "<th>" + h + "</th>").join("") + "</tr>";
+  const clase = {"numérica":"t-num","categórica":"t-cat","fecha":"t-fec","binaria":"t-bin"};
+  $("#tabla-perfil tbody").innerHTML = p.columnas.map(c => {
+    let res;
+    if(c.tipo === "numérica" && c.media !== undefined){
+      res = "media " + c.media + " · de " + c.de + " · med " + c.mediana + " · [" + c.min + ", " + c.max + "]";
+    } else {
+      res = (c.frecuentes || []).slice(0,4).map(f => esc(f.valor) + " (" + f.n + ")").join(" · ") || "—";
+    }
+    return "<tr><td><b>" + esc(c.nombre) + "</b></td>" +
+      '<td><span class="tipo ' + clase[c.tipo] + '">' + c.tipo + "</span></td>" +
+      "<td>" + c.n + "</td>" +
+      "<td" + (c.pctFaltan > 20 ? ' class="aviso-na"' : "") + ">" + c.faltan + (c.faltan ? " (" + c.pctFaltan + "%)" : "") + "</td>" +
+      "<td>" + c.unicos + "</td><td>" + esc(res) + "</td></tr>";
+  }).join("");
+  $("#panel-perfil").classList.remove("oculto");
+  zona.querySelector("strong").textContent = S.nombreFichero;
+  zona.querySelector("span").textContent = p.nFilas + " filas × " + p.nCols + " variables · pulsa para cambiar de fichero";
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* =====================================================================
+   Contexto y llamadas al modelo
+   ===================================================================== */
+function contexto(){
+  return {
+    titulo: $("#titulo").value.trim() || "Estudio sin título",
+    objetivo: $("#objetivo").value.trim(),
+    diseno: $("#diseno").value,
+    dependientes: $("#dependientes").value.trim(),
+    independientes: $("#independientes").value.trim(),
+    agrupacion: $("#agrupacion").value.trim(),
+    alfa: $("#alfa").value,
+    publico: $("#publico").value,
+    notas: $("#notas").value.trim(),
+    idioma: $("#idioma").value
+  };
+}
+function perfilTexto(){
+  const p = S.perfil, c = contexto();
+  let t = "DATOS: " + S.nombreFichero + " — " + p.nFilas + " filas, " + p.nCols + " variables";
+  if(p.duplicadas) t += " (" + p.duplicadas + " filas duplicadas detectadas)";
+  t += "\n\nVARIABLES (nombre | tipo | n válidos | ausentes | únicos | resumen):\n";
+  p.columnas.forEach(col => {
+    let r = col.tipo === "numérica" && col.media !== undefined
+      ? "media=" + col.media + " de=" + col.de + " min=" + col.min + " q1=" + col.q1 + " mediana=" + col.mediana + " q3=" + col.q3 + " max=" + col.max + " asimetria=" + col.asimetria + (col.enteros ? " (solo enteros)" : "")
+      : "niveles: " + (col.frecuentes || []).map(f => f.valor + "(" + f.n + ")").join(", ");
+    t += '- "' + col.nombre + '" | ' + col.tipo + " | n=" + col.n + " | NA=" + col.faltan + " | únicos=" + col.unicos + " | " + r + "\n";
+  });
+  const k = parseInt($("#filas-muestra").value, 10) || 0;
+  if(k > 0){
+    t += "\nMUESTRA (" + Math.min(k, S.filas.length) + " filas):\n";
+    t += S.campos.join(" | ") + "\n";
+    S.filas.slice(0, k).forEach(f => t += S.campos.map(c => f[c]).join(" | ") + "\n");
+  }
+  t += "\nCONTEXTO DEL ESTUDIO\nTítulo: " + c.titulo + "\nObjetivo: " + (c.objetivo || "(no especificado)") +
+       "\nDiseño: " + c.diseno + "\nRespuesta(s): " + (c.dependientes || "(a decidir)") +
+       "\nPredictores: " + (c.independientes || "(a decidir)") +
+       "\nAgrupación/sujeto: " + (c.agrupacion || "ninguna") +
+       "\nAlfa: " + c.alfa + "\nDestino: " + c.publico +
+       "\nNotas: " + (c.notas || "ninguna");
+  return t;
+}
+async function openai(mensajes, maxTokens){
+  const clave = ($("#clave").value.trim() || localStorage.getItem(CLAVE_LS) || "").trim();
+  if(!clave) throw new Error("Falta la clave de OpenAI: ábrela en Ajustes y guárdala.");
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method:"POST",
+    headers:{"Content-Type":"application/json", "Authorization":"Bearer " + clave},
+    body: JSON.stringify({
+      model: $("#modelo").value, temperature: 0.2, max_tokens: maxTokens,
+      response_format:{type:"json_object"}, messages: mensajes
+    })
+  });
+  if(!r.ok){
+    const t = await r.text();
+    if(r.status === 401) throw new Error("La clave de OpenAI no es válida (401).");
+    if(r.status === 429) throw new Error("Límite de uso o cuota agotada en OpenAI (429).");
+    throw new Error("OpenAI " + r.status + ": " + t.slice(0, 240));
+  }
+  const d = await r.json();
+  return JSON.parse(d.choices[0].message.content.replace(/^```json\s*|```$/g, "").trim());
+}
+
+/* =====================================================================
+   Plan de análisis
+   ===================================================================== */
+const REGLAS = [
+  "Trabajas sobre un DataFrame de pandas llamado df ya cargado desde datos.csv.",
+  "Usa EXACTAMENTE los nombres de columna dados, entre comillas; no inventes variables ni valores.",
+  "Bibliotecas permitidas: pandas, numpy, scipy.stats, statsmodels (api y formula.api), matplotlib.pyplot, sklearn solo si es imprescindible. Nada de seaborn ni de instalaciones.",
+  "El nivel de significación está en la constante ALFA.",
+  "Toda prueba debe informar de: n, estimación puntual, intervalo de confianza al 95%, estadístico, p valor y tamaño del efecto cuando exista.",
+  "Cada celda de código debe imprimir resultados legibles (print con etiquetas o print(tabla.to_string())); nunca dejar una celda sin salida, porque esas salidas alimentan luego la sección de Resultados.",
+  "Código robusto: comprueba tamaños muestrales y ausentes antes de cada prueba, y elige la alternativa no paramétrica si los supuestos fallan, dejando constancia impresa de la decisión.",
+  "Las figuras con matplotlib: una por celda como máximo, con títulos y etiquetas de ejes, sin fijar colores ni estilos, y terminando en plt.show()."
+];
+$("#btn-plan").onclick = async () => {
+  if(!S.perfil) return aviso("Primero sube el fichero de datos.");
+  if(!$("#objetivo").value.trim()) return aviso("Describe el objetivo del estudio: es lo que determina el plan estadístico.");
+  const b = $("#btn-plan"); b.disabled = true; b.textContent = "Pensando el plan…";
+  limpiaRegistro(); log("Consultando al modelo…");
+  try{
+    const c = contexto();
+    const plan = await openai([
+      {role:"system", content:
+        "Eres un bioestadístico senior que planifica el análisis de un conjunto de datos real para " + c.publico.toLowerCase() +
+        ". Diseñas planes de análisis proporcionados al diseño del estudio, al tamaño muestral y a la naturaleza de las variables. " +
+        "Respondes SOLO con un objeto JSON válido, sin texto fuera del JSON, redactado en " + c.idioma + "."},
+      {role:"user", content:
+        perfilTexto() +
+        "\n\nPropón el plan de análisis. Devuelve este JSON:\n" +
+        '{"titulo_cuaderno":"...","resumen_estrategia":"2-4 frases justificando la estrategia y las pruebas elegidas",' +
+        '"roles":{"respuesta":["..."],"predictores":["..."],"identificadores":["..."],"excluidas":["..."]},' +
+        '"avisos":["riesgos o limitaciones detectados en los datos"],' +
+        '"secciones":[{"n":1,"titulo":"...","bloque":"preparacion|descriptivo|supuestos|inferencial|modelizacion|diagnostico|sintesis",' +
+        '"objetivo":"qué responde esta sección","tecnicas":["prueba o técnica concreta con su nombre estadístico"]}]}\n\n' +
+        "Requisitos del plan: entre 7 y 10 secciones, en orden ejecutable, cubriendo obligatoriamente preparación y calidad de los datos, " +
+        "descriptivo univariante, descriptivo bivariante o por grupos, comprobación de supuestos, análisis inferencial, " +
+        "modelización estadística multivariante coherente con el diseño, diagnóstico y validación del modelo, y una síntesis final con la tabla de resultados. " +
+        "Elige las técnicas concretas (no genéricas) según el tipo de cada variable y el diseño declarado, y menciona el control de la multiplicidad si procede."}
+    ], 3000);
+    S.plan = plan;
+    S.secciones = (plan.secciones || []).map((s,i) => ({
+      n:i+1, titulo:s.titulo, bloque:s.bloque || "análisis", objetivo:s.objetivo || "",
+      tecnicas:Array.isArray(s.tecnicas) ? s.tecnicas : String(s.tecnicas || "").split(",").map(x=>x.trim()).filter(Boolean),
+      markdown:"", codigo:""
+    }));
+    pintarPlan();
+    $("#celda-plan").dataset.estado = "listo";
+    log("Plan propuesto: " + S.secciones.length + " secciones.", "ok");
+    $("#celda-plan").scrollIntoView({behavior:"smooth", block:"start"});
+  }catch(e){ log(e.message, "err"); aviso(e.message); }
+  finally{ b.disabled = false; b.textContent = "Proponer plan de análisis"; }
+};
+
+function pintarPlan(){
+  const est = $("#estrategia");
+  let html = "";
+  if(S.plan && S.plan.resumen_estrategia) html += "<b>Estrategia.</b> " + esc(S.plan.resumen_estrategia);
+  if(S.plan && S.plan.avisos && S.plan.avisos.length) html += "<br><b>Avisos sobre los datos.</b> " + S.plan.avisos.map(esc).join(" · ");
+  est.innerHTML = html; est.classList.toggle("oculto", !html);
+
+  $("#lista-plan").innerHTML = S.secciones.map((s,i) =>
+    '<div class="seccion-plan" data-i="' + i + '" data-hecho="' + (s.codigo ? 1 : 0) + '">' +
+      '<header><span class="n">' + (i+1) + '</span><span class="bloque">' + esc(s.bloque) + "</span>" +
+        '<div class="mandos">' +
+          '<button class="btn-min" data-acc="sube" title="Subir">↑</button>' +
+          '<button class="btn-min" data-acc="baja" title="Bajar">↓</button>' +
+          '<button class="btn-min" data-acc="borra" title="Eliminar">✕</button>' +
+        "</div></header>" +
+      '<div class="campo"><label>Título</label><input type="text" data-c="titulo" value="' + esc(s.titulo || "") + '"></div>' +
+      '<div class="campo"><label>Objetivo</label><textarea data-c="objetivo" style="min-height:54px">' + esc(s.objetivo || "") + "</textarea></div>" +
+      '<div class="campo" style="margin-bottom:0"><label>Técnicas</label><input type="text" data-c="tecnicas" value="' + esc((s.tecnicas || []).join(", ")) + '"></div>' +
+    "</div>").join("");
+
+  $$("#lista-plan .seccion-plan").forEach(nodo => {
+    const i = +nodo.dataset.i;
+    nodo.querySelectorAll("[data-c]").forEach(inp => {
+      inp.oninput = () => {
+        const c = inp.dataset.c;
+        S.secciones[i][c] = c === "tecnicas" ? inp.value.split(",").map(x=>x.trim()).filter(Boolean) : inp.value;
+      };
+    });
+    nodo.querySelectorAll("[data-acc]").forEach(b => {
+      b.onclick = () => {
+        const a = b.dataset.acc;
+        if(a === "borra") S.secciones.splice(i,1);
+        if(a === "sube" && i > 0) S.secciones.splice(i-1, 0, S.secciones.splice(i,1)[0]);
+        if(a === "baja" && i < S.secciones.length-1) S.secciones.splice(i+1, 0, S.secciones.splice(i,1)[0]);
+        pintarPlan();
+      };
+    });
+  });
+}
+$("#btn-anadir-seccion").onclick = () => {
+  S.secciones.push({titulo:"Nueva sección", bloque:"análisis", objetivo:"", tecnicas:[], markdown:"", codigo:""});
+  pintarPlan();
+};
+
+/* =====================================================================
+   Generación de las celdas
+   ===================================================================== */
+$("#btn-parar").onclick = () => { S.parar = true; log("Parando tras la sección en curso…"); };
+$("#btn-generar").onclick = async () => {
+  if(!S.secciones.length) return aviso("No hay plan: propón uno o añade secciones a mano.");
+  if(S.generando) return;
+  S.generando = true; S.parar = false;
+  $("#btn-generar").disabled = true; $("#btn-plan").disabled = true;
+  $("#btn-parar").classList.remove("oculto"); $("#barra").classList.remove("oculto");
+  const c = contexto();
+  const total = S.secciones.length;
+  let hechas = 0;
+  for(let i = 0; i < total; i++){
+    if(S.parar) break;
+    const s = S.secciones[i];
+    log("Escribiendo " + (i+1) + "/" + total + ": " + s.titulo + "…");
+    try{
+      const previas = S.secciones.slice(0, i).map((p,j) => (j+1) + ". " + p.titulo + " → " + (p.tecnicas || []).join(", ")).join("\n") || "ninguna";
+      const r = await openai([
+        {role:"system", content:
+          "Eres un bioestadístico que escribe cuadernos Jupyter reproducibles en Python. Redactas en " + c.idioma +
+          ". Respondes SOLO con un objeto JSON válido.\nREGLAS DEL CÓDIGO:\n- " + REGLAS.join("\n- ")},
+        {role:"user", content:
+          perfilTexto() +
+          "\n\nPLAN COMPLETO:\n" + S.secciones.map((p,j) => (j+1) + ". " + p.titulo + " [" + p.bloque + "] " + p.objetivo).join("\n") +
+          "\n\nSECCIONES YA ESCRITAS (no las repitas, sus objetos siguen disponibles):\n" + previas +
+          "\n\nESCRIBE AHORA LA SECCIÓN " + (i+1) + ": " + s.titulo +
+          "\nBloque: " + s.bloque + "\nObjetivo: " + s.objetivo + "\nTécnicas previstas: " + (s.tecnicas || []).join(", ") +
+          '\n\nDevuelve: {"markdown":"celda markdown que abre la sección: encabezado de nivel 2, qué se hace y por qué esa técnica, en 3-6 frases",' +
+          '"codigo":"celda de código Python completa y ejecutable, comentada, que produce las salidas impresas"}\n' +
+          "El código debe ser autónomo salvo por df, ALFA y los imports iniciales, que ya existen. Nada de markdown ni de vallas de código dentro del campo codigo."}
+      ], 2600);
+      s.markdown = String(r.markdown || "").trim();
+      s.codigo = String(r.codigo || "").replace(/^```(python)?\s*|```$/g, "").trim();
+      hechas++;
+      log("✓ " + s.titulo, "ok");
+    }catch(e){
+      log("✗ " + s.titulo + " — " + e.message, "err");
+      s.markdown = "## " + s.titulo + "\n\n_Sección no generada: " + e.message + "_";
+      s.codigo = "# No se pudo generar el código de esta sección.\n# Objetivo: " + (s.objetivo||"") + "\n# Técnicas: " + (s.tecnicas||[]).join(", ");
+    }
+    $("#barra i").style.width = Math.round(100*(i+1)/total) + "%";
+    pintarPlan();
+  }
+  S.generando = false;
+  $("#btn-generar").disabled = false; $("#btn-plan").disabled = false;
+  $("#btn-parar").classList.add("oculto");
+  if(hechas){
+    construirCuaderno();
+    guardarProyecto();
+    $("#celda-cuaderno").dataset.estado = "listo";
+    $("#celda-cuaderno").scrollIntoView({behavior:"smooth", block:"start"});
+  }
+};
+
+/* =====================================================================
+   Construcción del .ipynb
+   ===================================================================== */
+function lineas(t){
+  const a = String(t).split("\n");
+  return a.map((l,i) => i < a.length-1 ? l + "\n" : l);
+}
+const md = t => ({cell_type:"markdown", metadata:{}, source:lineas(t)});
+const cod = t => ({cell_type:"code", execution_count:null, metadata:{}, outputs:[], source:lineas(t)});
+
+function construirCuaderno(){
+  const c = contexto(), p = S.perfil;
+  const hoy = new Date().toISOString().slice(0,10);
+  const celdas = [];
+
+  celdas.push(md(
+    "# " + ((S.plan && S.plan.titulo_cuaderno) || c.titulo) + "\n\n" +
+    "**Diseño.** " + c.diseno + "  \n" +
+    "**Objetivo.** " + (c.objetivo || "—") + "  \n" +
+    "**Variable(s) respuesta.** " + (c.dependientes || "—") + "  \n" +
+    "**Predictores.** " + (c.independientes || "—") + "  \n" +
+    "**Datos.** `" + S.nombreFichero + "` → `datos.csv` · " + p.nFilas + " observaciones × " + p.nCols + " variables  \n" +
+    "**Nivel de significación.** α = " + c.alfa + "  \n" +
+    "**Fecha.** " + hoy + "\n\n" +
+    ((S.plan && S.plan.resumen_estrategia) ? "> " + S.plan.resumen_estrategia + "\n\n" : "") +
+    "---\n\n" +
+    "Cuaderno generado con **CuadernIA**. Ejecútalo de arriba abajo con `datos.csv` en la misma carpeta; " +
+    "una vez ejecutado y con todas las salidas visibles, el `.ipynb` puede pasarse a **NarrativIA** para redactar la sección de Resultados.\n\n" +
+    "Revisa siempre las decisiones estadísticas antes de publicar: el plan es una propuesta, no un dictamen."
+  ));
+
+  celdas.push(cod(
+    "# --- Entorno y carga de datos -------------------------------------------\n" +
+    "import warnings\n" +
+    "warnings.filterwarnings('ignore')\n" +
+    "import numpy as np\n" +
+    "import pandas as pd\n" +
+    "import scipy.stats as st\n" +
+    "import statsmodels.api as sm\n" +
+    "import statsmodels.formula.api as smf\n" +
+    "import matplotlib.pyplot as plt\n\n" +
+    "pd.set_option('display.width', 140)\n" +
+    "pd.set_option('display.max_columns', 60)\n" +
+    "np.random.seed(42)\n\n" +
+    "ALFA = " + c.alfa + "\n" +
+    "ARCHIVO = 'datos.csv'\n" +
+    "df = pd.read_csv(ARCHIVO)\n\n" +
+    "print('Observaciones:', df.shape[0], '| Variables:', df.shape[1])\n" +
+    "print('\\nTipos de dato:')\n" +
+    "print(df.dtypes.to_string())\n" +
+    "print('\\nValores ausentes por variable:')\n" +
+    "print(df.isna().sum().to_string())\n" +
+    "df.head()"
+  ));
+
+  S.secciones.forEach((s,i) => {
+    let m = (s.markdown || "").trim();
+    if(!/^#{1,4}\s/.test(m)) m = "## " + (i+1) + ". " + s.titulo + "\n\n" + m;
+    celdas.push(md(m));
+    if(s.codigo) celdas.push(cod(s.codigo));
+  });
+
+  celdas.push(md(
+    "## Cierre\n\n" +
+    "Comprueba antes de exportar: que todas las celdas se han ejecutado sin error, que cada prueba informa de n, estimación, " +
+    "intervalo de confianza, p valor y tamaño del efecto, y que las figuras se ven correctamente. " +
+    "Este cuaderno ejecutado es la entrada de NarrativIA."
+  ));
+  celdas.push(cod(
+    "# --- Resumen de sesión para la trazabilidad ------------------------------\n" +
+    "import sys, platform\n" +
+    "print('Python', sys.version.split()[0], '|', platform.system())\n" +
+    "for m in [np, pd, sm]:\n" +
+    "    print(m.__name__, m.__version__)\n" +
+    "import scipy, matplotlib\n" +
+    "print('scipy', scipy.__version__, '| matplotlib', matplotlib.__version__)\n" +
+    "print('\\nAnálisis:', " + JSON.stringify(c.titulo) + ")\n" +
+    "print('Alfa:', ALFA, '| Observaciones analizadas:', len(df))"
+  ));
+
+  S.cuaderno = {
+    cells: celdas,
+    metadata:{
+      kernelspec:{display_name:"Python 3", language:"python", name:"python3"},
+      language_info:{name:"python", version:"3.11"},
+      cuadernia:{version:"1.0", generado:hoy, estudio:c.titulo, modelo:$("#modelo").value, destino:"NarrativIA"}
+    },
+    nbformat:4, nbformat_minor:5
+  };
+  vistaPrevia();
+  ["#btn-ipynb","#btn-csv","#btn-copiar"].forEach(b => $(b).disabled = false);
+}
+
+function vistaPrevia(){
+  const v = $("#vista-nb");
+  v.classList.remove("oculto");
+  let nc = 0;
+  v.innerHTML = S.cuaderno.cells.map(cl => {
+    const txt = cl.source.join("");
+    if(cl.cell_type === "markdown")
+      return '<div class="nb-celda"><div class="nb-canal"></div><div class="nb-md">' + aHtml(txt) + "</div></div>";
+    nc++;
+    return '<div class="nb-celda"><div class="nb-canal">In [' + nc + ']</div><div class="nb-cod"><code>' + esc(txt) + "</code></div></div>";
+  }).join("");
+}
+function aHtml(t){
+  return esc(t)
+    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.*)$/gm, "<h1>$1</h1>")
+    .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
+    .replace(/^---$/gm, "<hr>")
+    .replace(/^[-*] (.*)$/gm, "<li>$1</li>")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\n{2,}/g, "</p><p>")
+    .replace(/^/, "<p>") + "</p>";
+}
+
+/* =====================================================================
+   Descargas
+   ===================================================================== */
+function baja(nombre, contenido, tipo){
+  const u = URL.createObjectURL(new Blob([contenido], {type:tipo}));
+  const a = document.createElement("a");
+  a.href = u; a.download = nombre; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1500);
+}
+function nombreBase(){
+  return (contexto().titulo || "estudio").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0,48) || "cuaderno";
+}
+$("#btn-ipynb").onclick = () => baja(nombreBase() + ".ipynb", JSON.stringify(S.cuaderno, null, 1), "application/x-ipynb+json");
+$("#btn-csv").onclick = () => {
+  const cab = S.campos.map(csvCampo).join(",");
+  const cuerpo = S.filas.map(f => S.campos.map(c => csvCampo(normaliza(f[c], c))).join(",")).join("\n");
+  baja("datos.csv", "\uFEFF" + cab + "\n" + cuerpo, "text/csv;charset=utf-8");
+};
+function normaliza(v, col){
+  const info = S.perfil.columnas.find(c => c.nombre === col);
+  if(info && info.tipo === "numérica" && v !== ""){
+    const n = aNumero(v);
+    return isNaN(n) ? "" : String(n);
+  }
+  return v;
+}
+function csvCampo(v){
+  const s = v === undefined || v === null ? "" : String(v);
+  return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+$("#btn-copiar").onclick = async () => {
+  const t = S.cuaderno.cells.filter(c => c.cell_type === "code").map(c => c.source.join("")).join("\n\n# %%\n\n");
+  try{ await navigator.clipboard.writeText(t); log("Código copiado al portapapeles.", "ok"); }
+  catch(e){ aviso("El navegador ha bloqueado el portapapeles; descarga el .ipynb en su lugar."); }
+};
+
+/* =====================================================================
+   Historial (IndexedDB)
+   ===================================================================== */
+let BD = null;
+function abrirBD(){
+  return new Promise(res => {
+    const q = indexedDB.open("cuadernia", 1);
+    q.onupgradeneeded = e => e.target.result.createObjectStore("proyectos", {keyPath:"id"});
+    q.onsuccess = e => { BD = e.target.result; res(BD); };
+    q.onerror = () => res(null);
+  });
+}
+async function guardarProyecto(){
+  if(!BD) await abrirBD();
+  if(!BD) return;
+  const reg = {
+    id: Date.now(), fecha: new Date().toISOString(), titulo: contexto().titulo,
+    fichero: S.nombreFichero, nSecciones: S.secciones.length, cuaderno: S.cuaderno
+  };
+  BD.transaction("proyectos", "readwrite").objectStore("proyectos").put(reg);
+  setTimeout(listarProyectos, 300);
+}
+async function listarProyectos(){
+  if(!BD) await abrirBD();
+  if(!BD) return;
+  const q = BD.transaction("proyectos", "readonly").objectStore("proyectos").getAll();
+  q.onsuccess = () => {
+    const r = q.result.sort((a,b) => b.id - a.id);
+    const cont = $("#historial");
+    if(!r.length){ cont.textContent = "Todavía no hay ninguno."; return; }
+    cont.innerHTML = r.map(x =>
+      '<div class="historial-item"><span class="tt"><b>' + esc(x.titulo) + "</b> · " + esc(x.fichero) +
+      " · " + x.nSecciones + " secciones · " + x.fecha.slice(0,10) + "</span>" +
+      '<button class="btn-min" data-baja="' + x.id + '">Descargar</button>' +
+      '<button class="btn-min" data-elim="' + x.id + '">Borrar</button></div>').join("");
+    cont.querySelectorAll("[data-baja]").forEach(b => b.onclick = () => {
+      const x = r.find(y => y.id == b.dataset.baja);
+      baja((x.titulo || "cuaderno").replace(/\W+/g,"_").slice(0,40) + ".ipynb", JSON.stringify(x.cuaderno, null, 1), "application/x-ipynb+json");
+    });
+    cont.querySelectorAll("[data-elim]").forEach(b => b.onclick = () => {
+      BD.transaction("proyectos","readwrite").objectStore("proyectos").delete(+b.dataset.elim);
+      setTimeout(listarProyectos, 200);
+    });
+  };
+}
+
+/* =====================================================================
+   Utilidades de interfaz
+   ===================================================================== */
+function log(t, cls){
+  const d = document.createElement("div");
+  d.textContent = t; if(cls) d.className = cls;
+  $("#registro").appendChild(d);
+  $("#registro").scrollTop = $("#registro").scrollHeight;
+}
+function limpiaRegistro(){ $("#registro").innerHTML = ""; }
+function aviso(t){
+  let n = $("#aviso-flotante");
+  if(!n){
+    n = document.createElement("div"); n.id = "aviso-flotante"; n.className = "nota mal";
+    n.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:22px;max-width:520px;z-index:99;box-shadow:0 6px 20px rgba(16,26,22,.18);background:#FBEDEA";
+    document.body.appendChild(n);
+  }
+  n.textContent = t; n.style.display = "block";
+  clearTimeout(n._t); n._t = setTimeout(() => n.style.display = "none", 6000);
+}
+
+cargarAjustes();
+abrirBD().then(listarProyectos);
+</script>
+</body>
+</html>
