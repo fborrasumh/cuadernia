@@ -182,6 +182,8 @@ footer a{color:var(--pino)}
           <option value="gpt-4o">gpt-4o</option>
           <option value="gpt-4.1-mini">gpt-4.1-mini</option>
           <option value="gpt-4.1">gpt-4.1</option>
+          <option value="gpt-5.6-luna">gpt-5.6-luna (rápido y económico)</option>
+          <option value="gpt-5.6-terra">gpt-5.6-terra (equilibrado)</option>
         </select>
       </div>
       <div class="campo">
@@ -585,16 +587,30 @@ function perfilTexto(){
        "\nNotas: " + (c.notas || "ninguna");
   return t;
 }
+/* Los modelos de la familia GPT-5 razonan antes de responder: no admiten
+   temperature distinta de 1, usan max_completion_tokens en lugar de max_tokens
+   y descuentan los tokens de razonamiento de ese mismo presupuesto. */
+function esRazonador(modelo){ return /^(gpt-5|o[1-9])/.test(modelo); }
+
+function cuerpoPeticion(modelo, mensajes, maxTokens){
+  const base = { model: modelo, response_format:{type:"json_object"}, messages: mensajes };
+  if(esRazonador(modelo)){
+    base.max_completion_tokens = maxTokens * 2;  // margen para los tokens de razonamiento
+    base.reasoning_effort = "low";
+  }else{
+    base.temperature = 0.2;
+    base.max_tokens = maxTokens;
+  }
+  return base;
+}
+
 async function openai(mensajes, maxTokens){
   const clave = ($("#clave").value.trim() || localStorage.getItem(CLAVE_LS) || "").trim();
   if(!clave) throw new Error("Falta la clave de OpenAI: ábrela en Ajustes y guárdala.");
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method:"POST",
     headers:{"Content-Type":"application/json", "Authorization":"Bearer " + clave},
-    body: JSON.stringify({
-      model: $("#modelo").value, temperature: 0.2, max_tokens: maxTokens,
-      response_format:{type:"json_object"}, messages: mensajes
-    })
+    body: JSON.stringify(cuerpoPeticion($("#modelo").value, mensajes, maxTokens))
   });
   if(!r.ok){
     const t = await r.text();
@@ -603,7 +619,14 @@ async function openai(mensajes, maxTokens){
     throw new Error("OpenAI " + r.status + ": " + t.slice(0, 240));
   }
   const d = await r.json();
-  return JSON.parse(d.choices[0].message.content.replace(/^```json\s*|```$/g, "").trim());
+  const salida = d.choices[0];
+  const texto = (salida.message.content || "").replace(/^```json\s*|```$/g, "").trim();
+  if(!texto){
+    if(salida.finish_reason === "length")
+      throw new Error("El modelo agotó el presupuesto de tokens antes de responder. Prueba con menos filas de ejemplo o con otro modelo.");
+    throw new Error("El modelo devolvió una respuesta vacía.");
+  }
+  return JSON.parse(texto);
 }
 
 /* =====================================================================
