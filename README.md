@@ -19,7 +19,7 @@ El cuaderno está pensado como entrada de [NarrativIA](https://fborrasumh.github
 
 ## Uso
 
-Abre la app, guarda tu clave de OpenAI en Ajustes (modelo por defecto `gpt-4o-mini`) y sigue los cuatro pasos. Solo se envían al modelo el perfil estadístico y el contexto del estudio; las filas de ejemplo son configurables y admiten 0 para datos sensibles.
+Abre la app, guarda tu clave de OpenAI en Ajustes (modelo por defecto `gpt-6-luna`, temperatura 1) y sigue los cuatro pasos. Solo se envían al modelo el perfil estadístico y el contexto del estudio; las filas de ejemplo son configurables y admiten 0 para datos sensibles.
 
 ## Privacidad
 
