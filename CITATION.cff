@@ -1,6 +1,7 @@
 cff-version: 1.2.0
 message: "Si usas este software, cítalo con estos metadatos."
 title: "CuadernIA"
+abstract: "Genera cuadernos Jupyter de análisis estadístico a partir de un fichero de datos y una descripción del estudio; cada celda se ejecuta en el navegador con Pyodide, se depura con el error real y la revisa un agente estadístico."
 type: software
 authors:
   - family-names: "Borrás Rocher"
@@ -8,8 +9,15 @@ authors:
     affiliation: "Universidad Miguel Hernández de Elche"
     orcid: "https://orcid.org/0000-0002-5519-4573"
 doi: "10.5281/zenodo.22035491"
-version: "1.0.0"
-date-released: "2026-08-20"
+version: "2.0.0"
+date-released: "2026-09-26"
 url: "https://fborrasumh.github.io/cuadernia/"
 repository-code: "https://github.com/fborrasumh/cuadernia"
 license: MIT
+keywords:
+  - "cuaderno Jupyter"
+  - "análisis estadístico"
+  - "reproducibilidad"
+  - "Pyodide"
+  - "agentes de IA"
+  - "bioestadística"
